@@ -105,9 +105,9 @@ instruction_table = {
     "brhz": {"type": "RI16", "opcode": 0b001000100},
 
     # ---------------- SPECIAL ----------------
-    "nop":  {"type": "NOP", "opcode": 0b01000000001},
-    "lnop": {"type": "NOP", "opcode": 0b00000000001},
-    "stop": {"type": "STOP", "opcode": 0b00000000000}
+    "nop":  {"type": "SPECIAL", "opcode": 0b01000000001},
+    "lnop": {"type": "SPECIAL", "opcode": 0b00000000001},
+    "stop": {"type": "SPECIAL", "opcode": 0b00000000000}
 }
 
 def check_width(value, bits, name):
@@ -162,6 +162,150 @@ def build_ri18(op, i18, rt):
 
     return (op << 25) | (i18 << 7) | rt
 
+def build_special(op):
+    check_width(op, 11, "opcode")
+
+    return (op << 21)
+
+def first_pass(lines):
+    labels = {}           # label_name -> instruction address
+    instructions = []     # list of tuples: (address, parsed line)
+    addr = 0              # current instruction address in bytes
+
+    for line in lines:
+        parts = parse_line(line)
+        if not parts:
+            continue
+        if parts[0].endswith(":"):
+            label = parts[0][:-1] # take off the : from label
+            labels[label] = addr #map addr to label key
+        else:
+            # store instruction for second pass
+            instructions.append((addr, parts))
+            addr += 4  # increment address (each instruction is 4 bytes)
+    
+    return labels, instructions
+
+def parse_line(line) -> list:
+    line = line.strip()
+    if not line:
+        return None
+    
+    parts = [token.strip() for token in line.split(',')]
+
+    first = parts[0].split()
+    parts = first + parts[1:]
+
+    return parts
+
+def parse_register(reg) -> int:
+    reg = reg.lower() #convert to lowercase r
+    if not reg.startswith("r"):
+        raise ValueError(f"Invalid register: {reg}")
+    
+    val = int(reg[1:]) #strip leading r or R
+
+    if not (0 <= val < 128):
+        raise ValueError(f"Register out of range: {reg}")
+    
+    return val
+
+def compute_branch_offset(target_addr, base_addr, bits):
+    offset = (target_addr - base_addr) >> 2
+
+    min_val = -(1 << (bits - 1))
+    max_val = (1 << (bits - 1)) - 1
+
+    if not (min_val <= offset <= max_val): # for safety
+        raise ValueError(f"Branch offset out of range: {offset}")
+
+    return offset & ((1 << bits) - 1)
+
+def encode_instruction(mnemonic, operands, labels, current_addr):
+    instr = instruction_table[mnemonic]
+    instr_type = instr["type"]
+    instr_op = instr["opcode"]
+
+    # ---------------- RR ----------------
+    if instr_type == "RR":
+        rt, ra, rb = [parse_register(r) for r in operands]
+        return build_rr(instr_op, rb, ra, rt)
+
+    # ---------------- RRR ----------------
+    elif instr_type == "RRR":
+        rt, ra, rb, rc = [parse_register(r) for r in operands]
+        return build_rrr(instr_op, rt, rb, ra, rc)
+
+    # ---------------- RI10 ----------------
+    elif instr_type == "RI10":
+        rt = parse_register(operands[0])
+        ra = parse_register(operands[1])
+        i10 = int(operands[2], 0) & 0x3FF
+        return build_ri10(instr_op, i10, ra, rt)
+
+    # ---------------- RI7 ----------------
+    elif instr_type == "RI7":
+        if(mnemonic == "bi"):
+            i7 = 0
+            ra = parse_register(operands[0])
+            rt = 0
+        elif mnemonic in ["biz", "binz", "bihz", "bihnz"]:
+            i7 = 0
+            rt, ra = [parse_register(r) for r in operands]
+        else: #normal RI7 instruction
+            rt = parse_register(operands[0])
+            ra = parse_register(operands[1])
+            i7 = int(operands[2], 0) & 0x7F
+
+        return build_ri7(instr_op, i7, ra, rt)
+
+    # ---------------- RI16 ----------------
+    elif instr_type == "RI16":
+        if mnemonic == "br":
+            offset = compute_branch_offset(int(labels[operands[0]]), current_addr, 16)
+            return build_ri16(instr_op, offset, 0) 
+        elif mnemonic == "bra":
+            address = compute_branch_offset(int(labels[operands[0]]), 0, 16) # for branch absolute, treat base address as 0
+            return build_ri16(instr_op, address, 0)
+        elif mnemonic == "brsl":
+            offset = compute_branch_offset(int(labels[operands[1]]), current_addr, 16)
+            rt = parse_register(operands[0])
+            return build_ri16(instr_op, offset, rt) 
+        elif mnemonic == "brasl":
+            address = compute_branch_offset(int(labels[operands[1]]), 0, 16)
+            rt = parse_register(operands[0])
+            return build_ri16(instr_op, address, rt)
+        elif mnemonic in ["brnz", "brz", "brhnz", "brhz"]:
+            offset = compute_branch_offset(int(labels[operands[1]]), current_addr, 16)
+            rt = parse_register(operands[0])
+            return build_ri16(instr_op, offset, rt) 
+
+    elif instr_type == "SPECIAL":
+        return build_special(instr_op)
+
+def assemble_text_file(input_file, output_file):
+    with open(input_file, 'r') as f:
+        lines = f.readlines()
+    
+    # First pass: record labels
+    labels, instructions = first_pass(lines)
+
+    # Second pass: encode instructions and write it to output_file
+    with open(output_file, 'w') as f:
+        for i, (addr, parts) in enumerate(instructions):
+            mnemonic = parts[0].lower()
+            operands = parts[1:]
+            data = encode_instruction(mnemonic, operands, labels, addr)
+
+            if(i == len(instructions) - 1):
+                f.write(f"{data:08x}")
+            else:
+                f.write(f"{data:08x}\n")
 
 def main():
-    pass
+    input_file = "assembly.txt"
+    output_file = "instructions.txt"
+    assemble_text_file(input_file, output_file)
+
+if __name__ == "__main__":
+    main()
