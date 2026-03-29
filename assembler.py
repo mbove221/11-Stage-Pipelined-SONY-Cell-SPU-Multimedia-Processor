@@ -13,9 +13,9 @@ instruction_table = {
     "xor":   {"type": "RR", "opcode": 0b01001000001},
     "nand":  {"type": "RR", "opcode": 0b00011001001},
     "nor":   {"type": "RR", "opcode": 0b00001001001},
-    "clz":   {"type": "RR", "opcode": 0b01010100101},
-    "fsmh":  {"type": "RR", "opcode": 0b00110110101},
-    "fsm":   {"type": "RR", "opcode": 0b00110110100},
+    #"clz":   {"type": "RR", "opcode": 0b01010100101},
+    #"fsmh":  {"type": "RR", "opcode": 0b00110110101},
+    #"fsm":   {"type": "RR", "opcode": 0b00110110100},
     "ceqh":  {"type": "RR", "opcode": 0b01111001000},
     "ceq":   {"type": "RR", "opcode": 0b01111000000},
     "cgth":  {"type": "RR", "opcode": 0b01001001000},
@@ -31,7 +31,7 @@ instruction_table = {
     "fm":    {"type": "RR", "opcode": 0b01011000110},
     "mpy":   {"type": "RR", "opcode": 0b01111000100},
     "mpyu":  {"type": "RR", "opcode": 0b01111001100},
-    "cntb":  {"type": "RR", "opcode": 0b01010110100},
+    #"cntb":  {"type": "RR", "opcode": 0b01010110100},
     "absdb": {"type": "RR", "opcode": 0b00001010011},
     "avgb":  {"type": "RR", "opcode": 0b00011010011},
     "sumb":  {"type": "RR", "opcode": 0b01001010011},
@@ -40,8 +40,8 @@ instruction_table = {
     "rotqby":{"type": "RR", "opcode": 0b00111011100},
     "rotqbybi":{"type": "RR", "opcode": 0b00111001100},
     "rotqbi":{"type": "RR", "opcode": 0b00111011000},
-    "gbh":   {"type": "RR", "opcode": 0b00110110001},
-    "gb":    {"type": "RR", "opcode": 0b00110110000},
+    #"gbh":   {"type": "RR", "opcode": 0b00110110001},
+    #"gb":    {"type": "RR", "opcode": 0b00110110000},
     "lqx":   {"type": "RR", "opcode": 0b00111000100},
     "stqx":  {"type": "RR", "opcode": 0b00101000100},
 
@@ -86,6 +86,12 @@ instruction_table = {
     "binz": {"type": "RI7", "opcode": 0b00100101001},
     "bihz": {"type": "RI7", "opcode": 0b00100101010},
     "bihnz":{"type": "RI7", "opcode": 0b00100101011},
+    "clz":   {"type": "RI7", "opcode": 0b01010100101},
+    "fsmh":  {"type": "RI7", "opcode": 0b00110110101},
+    "fsm":   {"type": "RI7", "opcode": 0b00110110100},
+    "cntb":  {"type": "RI7", "opcode": 0b01010110100},
+    "gbh":   {"type": "RI7", "opcode": 0b00110110001},
+    "gb":    {"type": "RI7", "opcode": 0b00110110000},
 
     # ---------------- RI16 ----------------
     "ilh":  {"type": "RI16", "opcode": 0b010000011},
@@ -249,7 +255,7 @@ def encode_instruction(mnemonic, operands, labels, current_addr):
             i7 = 0
             ra = parse_register(operands[0])
             rt = 0
-        elif mnemonic in ["biz", "binz", "bihz", "bihnz"]:
+        elif mnemonic in ["biz", "binz", "bihz", "bihnz", "clz", "fsmh", "fsm", "cntb", "gbh", "gb"]:
             i7 = 0
             rt, ra = [parse_register(r) for r in operands]
         else: #normal RI7 instruction
@@ -279,6 +285,10 @@ def encode_instruction(mnemonic, operands, labels, current_addr):
             offset = compute_branch_offset(int(labels[operands[1]]), current_addr, 16)
             rt = parse_register(operands[0])
             return build_ri16(instr_op, offset, rt) 
+        elif mnemonic in ["ilh", "ilhu", "il", "iohl", "fsmbi", "lqa", "stqa"]:
+            rt = parse_register(operands[0])
+            i16 = int(operands[1], 0) & 0xFFFF
+            return build_ri16(instr_op, i16, rt)
 
     elif instr_type == "SPECIAL":
         return build_special(instr_op)

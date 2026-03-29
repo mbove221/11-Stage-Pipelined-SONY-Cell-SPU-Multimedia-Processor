@@ -61,7 +61,7 @@ logic [0:127] forward_RT_odd;
 always_comb begin
     // Even packet
     pkt_in_even.RA           = forward_RA_even;
-    pkt_in_even.RB           = forward_RB_odd;
+    pkt_in_even.RB           = forward_RB_even; ///######
     pkt_in_even.RC           = forward_RC_even;
     pkt_in_even.RT_read_addr = RT_addr_even;
     pkt_in_even.RT_read_data = forward_RT_even;

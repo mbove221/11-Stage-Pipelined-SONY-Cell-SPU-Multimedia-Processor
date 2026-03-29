@@ -14,7 +14,7 @@ package packet_pkg;
     } packet;
 
     typedef struct packed {
-        logic [0:2] unit_ID;
+        logic [0:6] unit_ID;
         logic [0:127] result;
         logic [0:2] latency;
         logic RegWr;
@@ -23,7 +23,7 @@ package packet_pkg;
     } even_packet;
 
     typedef struct packed {
-        logic [0:2] unit_ID;
+        logic [0:6] unit_ID;
         logic [0:127] result;
         logic [0:2] latency;
         logic RegWr;
