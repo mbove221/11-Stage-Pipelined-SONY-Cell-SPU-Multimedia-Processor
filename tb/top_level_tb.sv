@@ -25,12 +25,16 @@
 
 module top_level_tb();
 
+   // Path to the assembled hex image, relative to the repository root (the expected
+   // simulation working directory). Override at run time with +INSTR_FILE=<path>.
+   localparam string INSTR_FILE = "tb/assembler/instructions.txt";
+
    logic clk;
    logic reset_n;
    logic stop;
 
    // DUT
-   top_level dut (.clk(clk), .rst_n(reset_n), .stop(stop));
+   top_level #(.INSTR_FILE(INSTR_FILE)) dut (.clk(clk), .rst_n(reset_n), .stop(stop));
 
    // Clock generation (10ns period)
    initial clk = 0;

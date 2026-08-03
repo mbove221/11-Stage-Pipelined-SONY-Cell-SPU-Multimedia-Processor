@@ -1,3 +1,16 @@
+import argparse
+from pathlib import Path
+
+# Paths are resolved relative to this file so the assembler can be run from any
+# working directory:
+#   tb/assembler/assembler.py            <- this file
+#   tb/assembler/programs/assembly.txt   <- default assembly source
+#   tb/assembler/instructions.txt        <- hex image loaded by instruction_memory.sv
+ASSEMBLER_DIR = Path(__file__).resolve().parent
+PROGRAMS_DIR = ASSEMBLER_DIR / "programs"
+DEFAULT_INPUT = PROGRAMS_DIR / "assembly.txt"
+DEFAULT_OUTPUT = ASSEMBLER_DIR / "instructions.txt"
+
 instruction_table = {
     # ---------------- RR ----------------
     "ah":    {"type": "RR", "opcode": 0b00011001000},
@@ -328,9 +341,21 @@ def assemble_text_file(input_file, output_file):
                 f.write(f"{data:08x}\n")
 
 def main():
-    input_file = "assembly.txt"
-    output_file = "instructions.txt"
-    assemble_text_file(input_file, output_file)
+    parser = argparse.ArgumentParser(description="Assemble SPU-like assembly into a hex instruction image.")
+    parser.add_argument("input_file", nargs="?", default=DEFAULT_INPUT,
+                        help=f"assembly source (default: {DEFAULT_INPUT.relative_to(ASSEMBLER_DIR.parent.parent)})")
+    parser.add_argument("output_file", nargs="?", default=DEFAULT_OUTPUT,
+                        help=f"hex output loaded by instruction_memory.sv (default: {DEFAULT_OUTPUT.relative_to(ASSEMBLER_DIR.parent.parent)})")
+    args = parser.parse_args()
+
+    input_file = Path(args.input_file)
+    # A bare program name (e.g. "assembly_optimized.txt") resolves inside programs/
+    if not input_file.is_absolute() and not input_file.exists():
+        candidate = PROGRAMS_DIR / input_file
+        if candidate.exists():
+            input_file = candidate
+
+    assemble_text_file(input_file, Path(args.output_file))
 
 if __name__ == "__main__":
     main()

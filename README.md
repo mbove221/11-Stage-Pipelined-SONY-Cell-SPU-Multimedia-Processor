@@ -99,7 +99,7 @@ Assembler features:
 - Immediate-width validation.
 - Branch-offset calculation.
 - Encoding support for RR, RRR, RI7, RI10, RI16, RI18, and special instruction formats.
-- Output to `instructions.txt`, which is loaded by the SystemVerilog instruction memory.
+- Output to `tb/assembler/instructions.txt`, which is loaded by the SystemVerilog instruction memory.
 
 The assembler currently defines 99 mnemonics across the supported instruction formats, giving the RTL a broad instruction surface to decode and execute.
 
@@ -107,39 +107,94 @@ The assembler currently defines 99 mnemonics across the supported instruction fo
 
 ## Repository Structure
 
+```text
+.
+├── src/                          # Synthesizable RTL
+│   ├── packet_pkg.sv
+│   ├── program_counter.sv
+│   ├── instruction_memory.sv
+│   ├── register_file.sv
+│   ├── local_store.sv
+│   ├── IF_ID_reg.sv
+│   ├── ID_EX_reg.sv
+│   ├── decode.sv
+│   ├── even_execute.sv
+│   ├── odd_execute.sv
+│   ├── even_pipe.sv
+│   ├── odd_pipe.sv
+│   ├── execute.sv
+│   └── top_level.sv
+├── tb/                           # Verification
+│   ├── top_level_tb.sv
+│   ├── pipeline_tb.sv
+│   ├── expected_output.txt
+│   └── assembler/                # Toolchain + program images
+│       ├── assembler.py
+│       ├── instructions.txt      # Generated hex image loaded by instruction_memory.sv
+│       └── programs/             # Assembly sources
+│           ├── assembly.txt
+│           ├── assembly_original.txt
+│           ├── assembly_optimized.txt
+│           └── assembly_unoptimized.txt
+└── docs/
+    └── BlockDiagram.png
+```
+
+### `src/` — RTL
+
 | File | Purpose |
 | --- | --- |
-| `top_level.sv` | Processor integration: fetch, decode, issue, hazard detection, branch redirect, and execute wiring. |
-| `decode.sv` | Instruction decoder that maps instruction bit patterns to internal IDs, operand fields, latencies, writeback controls, and even/odd pipe type. |
-| `execute.sv` | Execute subsystem wrapper with register-file integration, forwarding, writeback, and branch flush control. |
-| `even_execute.sv` | Even-pipe functional unit implementation. |
-| `odd_execute.sv` | Odd-pipe functional unit implementation, including branch and local-store-oriented operations. |
-| `even_pipe.sv` / `odd_pipe.sv` | Pipeline movement and packet propagation for each execution pipe. |
-| `packet_pkg.sv` | Shared packed structs for decoded packets and pipeline packets. |
-| `register_file.sv` | 128-register, 128-bit-wide architectural register file. |
-| `instruction_memory.sv` | Two-instruction fetch memory backed by `instructions.txt`. |
-| `local_store.sv` | 128-bit local-store memory model with sample matrix data. |
-| `program_counter.sv` | Program counter register with write enable and reset behavior. |
-| `IF_ID_reg.sv` / `ID_EX_reg.sv` | Pipeline registers between fetch/decode and decode/execute. |
-| `assembler.py` | Python assembler for SPU-like assembly input. |
-| `assembly.txt` | Default assembly source consumed by the assembler. |
-| `instructions.txt` | Hex instruction image consumed by instruction memory. |
-| `top_level_tb.sv` | Full-system simulation testbench. |
-| `pipeline_tb.sv` | Lower-level pipeline-oriented testbench. |
-| `expected_output.txt` | Human-readable expected behavior notes for sample instructions. |
+| `src/top_level.sv` | Processor integration: fetch, decode, issue, hazard detection, branch redirect, and execute wiring. |
+| `src/decode.sv` | Instruction decoder that maps instruction bit patterns to internal IDs, operand fields, latencies, writeback controls, and even/odd pipe type. |
+| `src/execute.sv` | Execute subsystem wrapper with register-file integration, forwarding, writeback, and branch flush control. |
+| `src/even_execute.sv` | Even-pipe functional unit implementation. |
+| `src/odd_execute.sv` | Odd-pipe functional unit implementation, including branch and local-store-oriented operations. |
+| `src/even_pipe.sv` / `src/odd_pipe.sv` | Pipeline movement and packet propagation for each execution pipe. |
+| `src/packet_pkg.sv` | Shared packed structs for decoded packets and pipeline packets. |
+| `src/register_file.sv` | 128-register, 128-bit-wide architectural register file. |
+| `src/instruction_memory.sv` | Two-instruction fetch memory backed by `tb/assembler/instructions.txt`. |
+| `src/local_store.sv` | 128-bit local-store memory model with sample matrix data. |
+| `src/program_counter.sv` | Program counter register with write enable and reset behavior. |
+| `src/IF_ID_reg.sv` / `src/ID_EX_reg.sv` | Pipeline registers between fetch/decode and decode/execute. |
+
+### `tb/` — Testbenches, assembler, and programs
+
+| File | Purpose |
+| --- | --- |
+| `tb/top_level_tb.sv` | Full-system simulation testbench. |
+| `tb/pipeline_tb.sv` | Lower-level pipeline-oriented testbench. |
+| `tb/expected_output.txt` | Human-readable expected behavior notes for sample instructions. |
+| `tb/assembler/assembler.py` | Python assembler for SPU-like assembly input. |
+| `tb/assembler/instructions.txt` | Hex instruction image consumed by instruction memory. |
+| `tb/assembler/programs/assembly.txt` | Default assembly source consumed by the assembler. |
+| `tb/assembler/programs/assembly_original.txt`, `assembly_unoptimized.txt`, `assembly_optimized.txt` | Additional sample programs. |
+
+### Instruction image path
+
+`instruction_memory.sv` loads its hex image with `$readmemh`. The path is a module
+parameter (`INSTR_FILE`) threaded through `top_level` and set by `top_level_tb`, and it
+defaults to `tb/assembler/instructions.txt` relative to the repository root. Run the
+simulator from the repository root, or point it elsewhere at run time with the plusarg:
+
+```bash
+<simulator> ... +INSTR_FILE=/absolute/path/to/instructions.txt
+```
 
 ---
 
 ## Architecture Overview
 
 The diagram below summarizes the core pipeline shape: dual-instruction fetch feeds dual decode, hazard checking, issue routing, register fetch/forwarding, and then multiple even/odd execution lanes before even and odd writeback.
-![Block Diagram](BlockDiagram.png "System Block Diagram")
+![Block Diagram](docs/BlockDiagram.png "System Block Diagram")
 
 ```text
-assembly.txt
-    |
-    v
-assembler.py  --->  instructions.txt
+tb/assembler/programs/assembly.txt
+                         |
+                         v
+             tb/assembler/assembler.py
+                         |
+                         v
+           tb/assembler/instructions.txt
                          |
                          v
                   instruction_memory
@@ -181,7 +236,7 @@ assembler.py  --->  instructions.txt
 - The program counter normally increments by **8 bytes** so the front end can fetch a pair of 32-bit instructions each cycle.
 - When a branch is taken, the program counter is redirected to the computed branch target address instead of the sequential `PC + 8` value.
 - Stall and stop conditions feed the `pc_write` control so the front end only advances when the pipeline can safely accept new work.
-- Instruction memory is modeled as a **2 kB asynchronous-read memory** initialized at simulation start from `instructions.txt` with `$readmemh`.
+- Instruction memory is modeled as a **2 kB asynchronous-read memory** initialized at simulation start from `tb/assembler/instructions.txt` with `$readmemh`.
 - The memory interface always presents two adjacent instructions to the pipeline, which lets the issue logic decide whether to dual-issue, single-issue, or inject hardware no-ops.
 
 ### IF/ID Register and Dual Decode
@@ -261,38 +316,46 @@ The assembler instruction table is organized by binary instruction format:
 ### Assemble the Default Program
 
 ```bash
-python3 assembler.py
+python3 tb/assembler/assembler.py
 ```
 
-This reads `assembly.txt` and writes `instructions.txt`.
+This reads `tb/assembler/programs/assembly.txt` and writes `tb/assembler/instructions.txt`.
+The assembler resolves those defaults relative to its own location, so it can be run from
+any working directory. To assemble a different program, pass it explicitly (a bare name is
+looked up in `tb/assembler/programs/`):
+
+```bash
+python3 tb/assembler/assembler.py assembly_optimized.txt
+python3 tb/assembler/assembler.py path/to/program.txt path/to/output.txt
+```
 
 ### Run a Simulation
 
 Simulator command lines vary by tool. A typical flow is:
 
 1. Compile the SystemVerilog source files.
-2. Use `top_level_tb.sv` as the top-level testbench.
-3. Ensure the simulation working directory contains `instructions.txt`, because `instruction_memory.sv` loads it with `$readmemh`.
+2. Use `tb/top_level_tb.sv` as the top-level testbench.
+3. Run the simulator from the repository root, because `instruction_memory.sv` loads `tb/assembler/instructions.txt` with `$readmemh`. From any other directory, pass `+INSTR_FILE=<path>`.
 4. Run until the testbench observes the `stop` signal held high for the configured number of cycles or until the safety timeout is reached.
 
 Example file order for simulators that require package-first compilation:
 
 ```text
-packet_pkg.sv
-program_counter.sv
-instruction_memory.sv
-register_file.sv
-local_store.sv
-IF_ID_reg.sv
-ID_EX_reg.sv
-decode.sv
-even_execute.sv
-odd_execute.sv
-even_pipe.sv
-odd_pipe.sv
-execute.sv
-top_level.sv
-top_level_tb.sv
+src/packet_pkg.sv
+src/program_counter.sv
+src/instruction_memory.sv
+src/register_file.sv
+src/local_store.sv
+src/IF_ID_reg.sv
+src/ID_EX_reg.sv
+src/decode.sv
+src/even_execute.sv
+src/odd_execute.sv
+src/even_pipe.sv
+src/odd_pipe.sv
+src/execute.sv
+src/top_level.sv
+tb/top_level_tb.sv
 ```
 
 ---
@@ -300,17 +363,19 @@ top_level_tb.sv
 ## Example Workflow
 
 ```bash
-# 1. Edit assembly.txt with an SPU-like program.
-$EDITOR assembly.txt
+# 1. Edit the default program with an SPU-like program.
+$EDITOR tb/assembler/programs/assembly.txt
 
 # 2. Assemble into the hex image consumed by instruction memory.
-python3 assembler.py
+python3 tb/assembler/assembler.py
 
 # 3. Compile and run the RTL with your preferred SystemVerilog simulator.
 # Example only; adapt flags and source ordering to your simulator.
-<simulator> packet_pkg.sv program_counter.sv instruction_memory.sv register_file.sv \
-  local_store.sv IF_ID_reg.sv ID_EX_reg.sv decode.sv even_execute.sv \
-  odd_execute.sv even_pipe.sv odd_pipe.sv execute.sv top_level.sv top_level_tb.sv
+# Run from the repository root so $readmemh finds tb/assembler/instructions.txt.
+<simulator> src/packet_pkg.sv src/program_counter.sv src/instruction_memory.sv \
+  src/register_file.sv src/local_store.sv src/IF_ID_reg.sv src/ID_EX_reg.sv \
+  src/decode.sv src/even_execute.sv src/odd_execute.sv src/even_pipe.sv \
+  src/odd_pipe.sv src/execute.sv src/top_level.sv tb/top_level_tb.sv
 ```
 
 ---

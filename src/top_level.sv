@@ -1,6 +1,7 @@
 import packet_pkg::*;
 
 module top_level #(
+    parameter string INSTR_FILE = "tb/assembler/instructions.txt", //hex image produced by tb/assembler/assembler.py
     localparam LAST_STAGE = 8,
     localparam EVENTYPE = 0,
     localparam ODDTYPE = 1
@@ -143,7 +144,7 @@ module top_level #(
         .pc_out(pc_out)
     );
 
-    instruction_memory u_instruction_memory (
+    instruction_memory #(.INSTR_FILE(INSTR_FILE)) u_instruction_memory (
         .address  (pc_out),
         .instr1   (instr1_comb),
         .instr2   (instr2_comb)
